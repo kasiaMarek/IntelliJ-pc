@@ -1,0 +1,22 @@
+<idea-plugin>
+    <id>completions.with.presenatation.compiler</id>
+    <name>Scala Completions via PC</name>
+    <version>0.0.1-SNAPSHOT</version>
+
+    <description>Plugin for getting completions via presenation compiler</description>
+
+    <idea-version since-build="241"/>
+
+    <depends>org.intellij.scala</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <projectService id="PresentationCompilerPluginService"
+                serviceImplementation="intellij.pc.PresentationCompilerPluginService"/>
+
+        <completion.contributor
+                language="Scala"
+                implementationClass="intellij.pc.PcCompletionProvider"
+                order="first"/>
+    </extensions>
+
+</idea-plugin>
