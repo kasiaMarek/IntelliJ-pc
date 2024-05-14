@@ -1,71 +1,44 @@
 package intellij.pc
 
 import com.google.gson.Gson
-import com.intellij.codeInsight.completion.{
-  CompletionContributor,
-  CompletionInitializationContext,
-  CompletionParameters,
-  CompletionProvider,
-  CompletionResultSet,
-  CompletionType,
-  PrioritizedLookupElement
-}
+import com.intellij.codeInsight.completion.{CompletionContributor, CompletionInitializationContext, CompletionParameters, CompletionProvider, CompletionResultSet, CompletionType, PrioritizedLookupElement}
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.icons.AllIcons.Nodes
 import com.intellij.lang.Language
 import com.intellij.openapi.application.ApplicationActivationListener
+import com.intellij.openapi.application.ex.ApplicationUtil
 import com.intellij.openapi.wm.IdeFrame
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.module
 import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.progress.ProgressIndicatorProvider
 import com.intellij.openapi.project.{Project, ProjectLocator, ProjectManager}
 import com.intellij.openapi.roots.{CompilerModuleExtension, ProjectRootManager}
-import com.intellij.patterns.{
-  CharPattern,
-  ElementPattern,
-  PlatformPatterns,
-  StandardPatterns
-}
+import com.intellij.patterns.{CharPattern, ElementPattern, PlatformPatterns, StandardPatterns}
 import com.intellij.psi.{PsiClass, PsiElement, PsiFile}
 import com.intellij.psi.impl.{FakePsiElement, RenameableFakePsiElement}
-import com.intellij.psi.search.{
-  FilenameIndex,
-  GlobalSearchScope,
-  PsiShortNamesCache
-}
+import com.intellij.psi.search.{FilenameIndex, GlobalSearchScope, PsiShortNamesCache}
 import com.intellij.util.ProcessingContext
 import org.eclipse.lsp4j
-import org.eclipse.lsp4j.{
-  CompletionItem,
-  CompletionItemKind,
-  CompletionItemTag,
-  Location,
-  SymbolKind
-}
+import org.eclipse.lsp4j.{CompletionItem, CompletionItemKind, CompletionItemTag, Location, SymbolKind}
 import org.jetbrains.plugins.scala.ScalaLanguage
 import org.jetbrains.plugins.scala.caches.ScalaShortNamesCacheManager
 import org.jetbrains.plugins.scala.icons.Icons
 import org.jetbrains.plugins.scala.lang.completion.ScalaGlobalMembersCompletionContributor
 import org.jetbrains.plugins.scala.lang.psi.api.ScalaPsiElement
+
 import java.net.URI
 import java.nio.file.Paths
 import java.util
 import java.util.Optional
 import scala.jdk.FutureConverters.CompletionStageOps
-
 import javax.swing.Icon
 import scala.meta.internal.metals.CompilerOffsetParams
 import scala.meta.internal.pc.CompletionItemData
-import scala.meta.pc.{
-  ParentSymbols,
-  PresentationCompiler,
-  SymbolDocumentation,
-  SymbolSearch,
-  SymbolSearchVisitor
-}
-
+import scala.meta.pc.{ParentSymbols, PresentationCompiler, SymbolDocumentation, SymbolSearch, SymbolSearchVisitor}
 import org.jetbrains.plugins.scala.extensions.executionContext.appExecutionContext
 import org.jetbrains.plugins.scala.caches.ScalaShortNamesCache
+import org.jetbrains.plugins.scala.debugger.ui.util.CompletableFutureOps
 
 import scala.jdk.CollectionConverters._
 
@@ -160,46 +133,39 @@ final class PcCompletionProvider() extends CompletionContributor {
     )
 
     optPc.foreach { pc =>
-      pc.complete(params)
-        .get()
-        .getItems
-        .asScala
-        .toList
-        .sortBy(_.getSortText)
-        .zipWithIndex
-        .foreach { case (item, i) =>
-          val element = LookupElementBuilder.create(item.getFilterText)
-          val withTailText = if (item.getKind != CompletionItemKind.Field) {
-            element.withTailText(item.getDetail)
-          } else element.withTypeText(item.getDetail)
-          val withDeprecation =
-            if (
-              item.getTags != null && item.getTags.asScala.contains(
-                CompletionItemTag.Deprecated
-              )
-            )
-              withTailText.withStrikeoutness(true)
-            else withTailText
-          val withIcon = lspToIJIcon(item.getKind)
-            .map(icon => withDeprecation.withIcon(icon))
-            .getOrElse(withDeprecation)
-          val withFilterText = withIcon.withLookupString(item.getFilterText)
-          val identifier = new CompletionIdentifier(
-            item,
-            project,
-            parameters.getOriginalFile,
-            parameters.getOriginalPosition,
-            pc
-          )
-          val withPsiElement = withFilterText.withPsiElement(identifier)
-          val withPriority =
-            PrioritizedLookupElement.withPriority(withPsiElement, 1000 - i)
-          result.addElement(withPriority)
+      val completions = pc.complete(params)
+        .map { res =>
+          res.getItems
+            .asScala
+            .toList
+            .sortBy(_.getSortText)
+            .zipWithIndex
+            .map { case (item, i) =>
+              val element = LookupElementBuilder.create(item.getFilterText)
+              val withTailText = if (item.getKind != CompletionItemKind.Field) {
+                element.withTailText(item.getDetail)
+              } else element.withTypeText(item.getDetail)
+              val withDeprecation =
+                if (
+                  item.getTags != null && item.getTags.asScala.contains(
+                    CompletionItemTag.Deprecated
+                  )
+                )
+                  withTailText.withStrikeoutness(true)
+                else withTailText
+              val withIcon = lspToIJIcon(item.getKind)
+                .map(icon => withDeprecation.withIcon(icon))
+                .getOrElse(withDeprecation)
+              val withFilterText = withIcon.withLookupString(item.getFilterText)
+              val withPriority =
+                PrioritizedLookupElement.withPriority(withFilterText, 1000 - i)
+              withPriority
+            }
         }
+      ApplicationUtil.runWithCheckCanceled(completions, ProgressIndicatorProvider.getInstance().getProgressIndicator)
+      result.addAllElements(completions.get().asJava)
+      result.stopHere()
     }
-    result.stopHere() // this should stop IJ completions
-
-    super.fillCompletionVariants(parameters, result)
   }
 
   private def lspToIJIcon(kind: CompletionItemKind): Option[Icon] = {
