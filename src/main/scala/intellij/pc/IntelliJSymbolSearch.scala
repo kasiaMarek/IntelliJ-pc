@@ -8,34 +8,56 @@ import java.net.URI
 import java.nio.file.Paths
 import java.util
 import java.util.Optional
-import scala.meta.pc.{ParentSymbols, SymbolDocumentation, SymbolSearch, SymbolSearchVisitor}
+import scala.meta.pc.{
+  ParentSymbols,
+  SymbolDocumentation,
+  SymbolSearch,
+  SymbolSearchVisitor
+}
 import scala.jdk.CollectionConverters._
 
-final class IntelliJSymbolSearch(cache: PsiShortNamesCache, searchScope: GlobalSearchScope) extends SymbolSearch {
+final class IntelliJSymbolSearch(
+    cache: PsiShortNamesCache,
+    searchScope: GlobalSearchScope
+) extends SymbolSearch {
 
-  override def documentation(symbol: String, parents: ParentSymbols): Optional[SymbolDocumentation] = Optional.empty()
+  override def documentation(
+      symbol: String,
+      parents: ParentSymbols
+  ): Optional[SymbolDocumentation] = Optional.empty()
 
-  override def definition(symbol: String, sourceUri: URI): util.List[Location] = Nil.asJava
+  override def definition(symbol: String, sourceUri: URI): util.List[Location] =
+    Nil.asJava
 
-  override def definitionSourceToplevels(symbol: String, sourceUri: URI): util.List[String] = Nil.asJava
+  override def definitionSourceToplevels(
+      symbol: String,
+      sourceUri: URI
+  ): util.List[String] = Nil.asJava
 
-  override def search(query: String, buildTargetIdentifier: String, visitor: SymbolSearchVisitor): SymbolSearch.Result = {
-    //TODO: This is very slow. either make async / use copy of metals symbol search / no symbol search
-    if (query.length > 3) {
-      val allMatchingClasses = cache.getAllClassNames.filter(_.startsWith(query))
-      allMatchingClasses.map { classname =>
-        val classes = cache.getClassesByName(classname, searchScope)
-        classes.flatMap { psiClass =>
-          SemanticDbSymbolCreator.createSemanticDbSymbol(psiClass)
-        }.map { semanticDbSymbol =>
-          visitor.visitWorkspaceSymbol(Paths.get(""), semanticDbSymbol, SymbolKind.Null, new lsp4j.Range())
-        }
-      }
-    }
+  override def search(
+      query: String,
+      buildTargetIdentifier: String,
+      visitor: SymbolSearchVisitor
+  ): SymbolSearch.Result = {
+    // TODO: This is very slow. either make async / use copy of metals symbol search / no symbol search
+    // if (query.length > 3) {
+    //   val allMatchingClasses = cache.getAllClassNames.filter(_.startsWith(query))
+    //   allMatchingClasses.map { classname =>
+    //     val classes = cache.getClassesByName(classname, searchScope)
+    //     classes.flatMap { psiClass =>
+    //       SemanticDbSymbolCreator.createSemanticDbSymbol(psiClass)
+    //     }.map { semanticDbSymbol =>
+    //       visitor.visitWorkspaceSymbol(Paths.get(""), semanticDbSymbol, SymbolKind.Null, new lsp4j.Range())
+    //     }
+    //   }
+    // }
     SymbolSearch.Result.COMPLETE
   }
 
-
-  override def searchMethods(query: String, buildTargetIdentifier: String, visitor: SymbolSearchVisitor): SymbolSearch.Result =
+  override def searchMethods(
+      query: String,
+      buildTargetIdentifier: String,
+      visitor: SymbolSearchVisitor
+  ): SymbolSearch.Result =
     SymbolSearch.Result.COMPLETE
 }
