@@ -12,7 +12,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <projectService id="PresentationCompilerPluginService"
                 serviceImplementation="intellij.pc.PresentationCompilerPluginService"/>
-
+        <postStartupActivity implementation="intellij.pc.ReflectionUnregisterUtil"/>
         <completion.contributor
                 language="Scala"
                 implementationClass="intellij.pc.PcCompletionProvider"

@@ -1,26 +1,16 @@
 package intellij.pc
 
-import java.net.URLClassLoader
-
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.OrderEnumerator
 import com.intellij.psi.search.{GlobalSearchScope, PsiShortNamesCache}
-import java.nio.file.{Path, Paths}
-import java.util.ServiceLoader
+import java.nio.file.Paths
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
-import scala.meta.internal.pc.ScalaPresentationCompiler
 import scala.meta.pc.PresentationCompiler
 
-import coursierapi.{
-  Dependency,
-  Fetch,
-  MavenRepository,
-  Repository,
-  ResolutionParams
-}
 import intellij.pc.Embedded.presentationCompiler
 
 class PresentationCompilerPluginService(val project: Project) {
@@ -64,7 +54,7 @@ class PresentationCompilerPluginService(val project: Project) {
       if (name.contains("scala-sdk-")) {
         name match {
           case PresentationCompilerPluginService.scalaSdkPattern(version) =>
-            scalaVersion = version
+            sdkScalaVersion = version
             false
           case _ => true
         }
@@ -82,7 +72,7 @@ class PresentationCompilerPluginService(val project: Project) {
 
   def getPresentationCompiler(
       module0: module.Module
-  ): Option[PresentationCompiler] = {
+  )(implicit ec: ExecutionContext) = {
     Option(compilers.getOrElseUpdate(module0, startPc(module0).get))
   }
 }

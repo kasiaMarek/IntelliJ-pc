@@ -1,3 +1,41 @@
 .*
 !.gitignore
 target/
+*.class
+*.log
+
+# sbt specific
+.cache
+.history
+.lib/
+dist/*
+target/
+
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+**/.bloop
+.bsp/
+
+# Scala-IDE specific
+.scala_dependencies
+.worksheet
+
+.idea
+.metals/
+.ammonite/
+metals.sbt
+metals/project/
+.vscode/
+.DS_Store
+
+project/metals.sbt
+coursier
+
+# Scala CLI
+
+.scala-build/
+
+# Sourcegraph specific
+index.scip
