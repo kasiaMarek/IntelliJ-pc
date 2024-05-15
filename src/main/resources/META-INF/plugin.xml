@@ -3,15 +3,22 @@
     <name>Scala Completions via PC</name>
     <version>0.0.1-SNAPSHOT</version>
 
-    <description>Plugin for getting completions via presenation compiler</description>
+    <description>Plugin for getting completions via presentation compiler</description>
 
     <idea-version since-build="241"/>
 
     <depends>org.intellij.scala</depends>
 
+    <projectListeners>
+        <listener class="intellij.pc.fileWatcher.PcFileListener" topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+        <listener class="intellij.pc.fileWatcher.ClasspathListener" topic="com.intellij.openapi.roots.ModuleRootListener"/>
+        <listener class="intellij.pc.fileWatcher.PcFileOpenedListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    </projectListeners>
+
     <extensions defaultExtensionNs="com.intellij">
         <projectService id="PresentationCompilerPluginService"
                 serviceImplementation="intellij.pc.PresentationCompilerPluginService"/>
+        <projectService id="FileStateService" serviceImplementation="intellij.pc.fileWatcher.FileStateService"/>
         <postStartupActivity implementation="intellij.pc.ReflectionUnregisterUtil"/>
         <completion.contributor
                 language="Scala"
