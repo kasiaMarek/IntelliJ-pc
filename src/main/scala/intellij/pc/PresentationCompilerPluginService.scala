@@ -5,16 +5,12 @@ import com.intellij.openapi.module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.OrderEnumerator
-import com.intellij.openapi.roots.ProjectRootManager
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.PsiShortNamesCache
 import intellij.pc.Embedded.presentationCompiler
 import intellij.pc.symbolSearch.WorkspaceSymbolProvider
 
 import java.nio.file.Paths
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 import scala.meta.pc.PresentationCompiler
 

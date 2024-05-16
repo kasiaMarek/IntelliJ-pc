@@ -5,7 +5,6 @@ import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ContentIterator
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.roots.ProjectRootManager
@@ -17,14 +16,11 @@ import scala.meta.Dialect
 import scala.meta.dialects._
 import scala.meta.inputs.Input
 import scala.meta.internal.metals.EmptyReportContext
-import scala.meta.internal.metals.ReportContext
 import scala.meta.internal.metals.SemanticdbDefinition
 import scala.meta.internal.metals.WorkspaceSymbolInformation
-import scala.meta.internal.mtags.JavaMtags
 import scala.meta.internal.mtags.MtagsEnrichments.XtensionSemanticdbRange
 import scala.meta.internal.mtags.MtagsEnrichments.XtensionSymbolInformation
 import scala.meta.internal.mtags.MtagsEnrichments.XtensionSymbolInformationKind
-import scala.meta.internal.mtags.ScalaToplevelMtags
 import scala.util.control.NonFatal
 
 class Indexer(project: Project) {
