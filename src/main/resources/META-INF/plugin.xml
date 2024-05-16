@@ -19,6 +19,8 @@
         <projectService id="PresentationCompilerPluginService"
                 serviceImplementation="intellij.pc.PresentationCompilerPluginService"/>
         <projectService id="FileStateService" serviceImplementation="intellij.pc.fileWatcher.FileStateService"/>
+        <projectService id="Indexer" serviceImplementation="intellij.pc.symbolSearch.Indexer"/>
+        <projectService id="WorkspaceSymbolProvider" serviceImplementation="intellij.pc.symbolSearch.WorkspaceSymbolProvider"/>
         <postStartupActivity implementation="intellij.pc.ReflectionUnregisterUtil"/>
         <completion.contributor
                 language="Scala"

@@ -1,5 +1,12 @@
 package intellij.pc
 
+import com.intellij.openapi.diagnostic.Logger
+import coursierapi.Dependency
+import coursierapi.Fetch
+import coursierapi.MavenRepository
+import coursierapi.Repository
+import coursierapi.ResolutionParams
+
 import java.net.URLClassLoader
 import java.nio.file.Path
 import java.util.ServiceLoader
@@ -7,18 +14,9 @@ import scala.collection.concurrent.TrieMap
 import scala.jdk.CollectionConverters._
 import scala.meta.internal.pc.ScalaPresentationCompiler
 import scala.meta.pc.PresentationCompiler
-import com.intellij.openapi.diagnostic.Logger
-
-import coursierapi.{
-  Dependency,
-  Fetch,
-  MavenRepository,
-  Repository,
-  ResolutionParams
-}
 
 object Embedded {
-  val logger = Logger.getInstance(getClass.getName)
+  private val logger = Logger.getInstance(getClass.getName)
   private val presentationCompilers: TrieMap[String, URLClassLoader] =
     TrieMap.empty
 

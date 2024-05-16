@@ -1,111 +1,68 @@
 package intellij.pc
 
 import com.google.gson.Gson
-import com.intellij.codeInsight.completion.{CompletionContributor, CompletionInitializationContext, CompletionParameters, CompletionProvider, CompletionResultSet, CompletionType, PrioritizedLookupElement}
+import com.intellij.codeInsight.completion.CompletionContributor
+import com.intellij.codeInsight.completion.CompletionInitializationContext
+import com.intellij.codeInsight.completion.CompletionParameters
+import com.intellij.codeInsight.completion.CompletionProvider
+import com.intellij.codeInsight.completion.CompletionResultSet
+import com.intellij.codeInsight.completion.CompletionType
+import com.intellij.codeInsight.completion.PrioritizedLookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.icons.AllIcons.Nodes
 import com.intellij.lang.Language
 import com.intellij.openapi.application.ApplicationActivationListener
 import com.intellij.openapi.application.ex.ApplicationUtil
-import com.intellij.openapi.wm.IdeFrame
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.ProgressIndicatorProvider
-import com.intellij.openapi.project.{DumbAware, Project, ProjectLocator, ProjectManager}
-import com.intellij.openapi.roots.{CompilerModuleExtension, ProjectRootManager}
-import com.intellij.patterns.{CharPattern, ElementPattern, PlatformPatterns, StandardPatterns}
-import com.intellij.psi.{PsiClass, PsiElement, PsiFile}
-import com.intellij.psi.impl.{FakePsiElement, RenameableFakePsiElement}
-import com.intellij.psi.search.{FilenameIndex, GlobalSearchScope, PsiShortNamesCache}
+import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectLocator
+import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.roots.CompilerModuleExtension
+import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.wm.IdeFrame
+import com.intellij.patterns.CharPattern
+import com.intellij.patterns.ElementPattern
+import com.intellij.patterns.PlatformPatterns
+import com.intellij.patterns.StandardPatterns
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import com.intellij.psi.impl.FakePsiElement
+import com.intellij.psi.impl.RenameableFakePsiElement
+import com.intellij.psi.search.FilenameIndex
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.util.ProcessingContext
 import org.eclipse.lsp4j
-import org.eclipse.lsp4j.{CompletionItem, CompletionItemKind, CompletionItemTag, Location, SymbolKind}
+import org.eclipse.lsp4j.CompletionItem
+import org.eclipse.lsp4j.CompletionItemKind
+import org.eclipse.lsp4j.CompletionItemTag
+import org.eclipse.lsp4j.Location
+import org.eclipse.lsp4j.SymbolKind
 import org.jetbrains.plugins.scala.ScalaLanguage
 import org.jetbrains.plugins.scala.caches.ScalaShortNamesCacheManager
+import org.jetbrains.plugins.scala.debugger.ui.util.CompletableFutureOps
+import org.jetbrains.plugins.scala.extensions.executionContext.appExecutionContext
 import org.jetbrains.plugins.scala.icons.Icons
 import org.jetbrains.plugins.scala.lang.completion.ScalaGlobalMembersCompletionContributor
 import org.jetbrains.plugins.scala.lang.psi.api.ScalaPsiElement
+
 import java.net.URI
 import java.nio.file.Paths
 import java.util
 import java.util.Optional
-import scala.jdk.FutureConverters.CompletionStageOps
-
 import javax.swing.Icon
-import scala.meta.internal.metals.CompilerOffsetParams
-import scala.meta.internal.pc.CompletionItemData
-import scala.meta.pc.{ParentSymbols, PresentationCompiler, SymbolDocumentation, SymbolSearch, SymbolSearchVisitor}
-
-import org.jetbrains.plugins.scala.extensions.executionContext.appExecutionContext
-import org.jetbrains.plugins.scala.caches.ScalaShortNamesCache
-import org.jetbrains.plugins.scala.debugger.ui.util.CompletableFutureOps
 import scala.jdk.CollectionConverters._
+import scala.jdk.FutureConverters.CompletionStageOps
+import scala.meta.internal.metals.CompilerOffsetParams
 
-final class CompletionIdentifier(
-    val item: CompletionItem,
-    project: Project,
-    file: PsiFile,
-    element: PsiElement,
-    val pc: PresentationCompiler
-) extends FakePsiElement {
-  override def getParent: PsiElement = null
-
-  override def getProject: Project = project
-
-  override def getContainingFile: PsiFile = file
-
-  override def getText: String = item.getLabel
-}
-
-object SemanticDbSymbolCreator {
-  import com.intellij.psi._
-
-  def createSemanticDbSymbol(element: PsiElement): Option[String] =
-    element match {
-      case psiClass: PsiClass   => Some(getClassSymbol(psiClass))
-      case psiMethod: PsiMethod => getMethodSymbol(psiMethod)
-      case psiField: PsiField   => getFieldSymbol(psiField)
-      case psiLocalVariable: PsiLocalVariable =>
-        getLocalVariableSymbol(psiLocalVariable)
-      // Extend this with additional cases for other PsiElement types if necessary
-      case _ => None
-    }
-
-  private def getClassSymbol(psiClass: PsiClass): String = {
-    val suffix =
-      if (psiClass.getLanguage.is(ScalaLanguage.INSTANCE)) "."
-      else "#"
-    Option(psiClass.getQualifiedName)
-      .map(_.replace(".", "/") + suffix)
-      .getOrElse("")
-  }
-
-  private def getMethodSymbol(psiMethod: PsiMethod): Option[String] = {
-    for {
-      containingClass <- Option(psiMethod.getContainingClass)
-      methodName <- Option(psiMethod.getName)
-    } yield getClassSymbol(containingClass) + "." + methodName + "()"
-  }
-
-  private def getFieldSymbol(psiField: PsiField): Option[String] = {
-    for {
-      containingClass <- Option(psiField.getContainingClass)
-      fieldName <- Option(psiField.getName)
-    } yield getClassSymbol(containingClass) + "." + fieldName
-  }
-
-  private def getLocalVariableSymbol(
-      psiLocalVariable: PsiLocalVariable
-  ): Option[String] = {
-    Option(psiLocalVariable.getParent)
-      .collect { case psiMethod: PsiMethod => psiMethod }
-      .flatMap(psiMethod => getMethodSymbol(psiMethod))
-      .map(methodSymbol => methodSymbol + "/" + psiLocalVariable.getName)
-  }
-}
-
-final class PcCompletionProvider() extends CompletionContributor with DumbAware {
+final class PcCompletionProvider()
+    extends CompletionContributor
+    with DumbAware {
   val logger = Logger.getInstance(getClass.getName)
   logger.warn("Starting PCCompletionProvider")
 
@@ -124,7 +81,9 @@ final class PcCompletionProvider() extends CompletionContributor with DumbAware 
       .getInstance(project)
       .getFileIndex
       .getModuleForFile(file)
-    logger.warn(s"module for: ${if(module != null) module.getName else "null"}")
+    logger.warn(
+      s"module for: ${if (module != null) module.getName else "null"}"
+    )
     val optPc = Option(module).flatMap(compilersService.getPresentationCompiler)
 
     val path = Paths.get(file.getCanonicalPath)
@@ -135,11 +94,10 @@ final class PcCompletionProvider() extends CompletionContributor with DumbAware 
     )
 
     optPc.foreach { pc =>
-      val completions = pc.complete(params)
+      val completions = pc
+        .complete(params)
         .map { res =>
-          res.getItems
-            .asScala
-            .toList
+          res.getItems.asScala.toList
             .sortBy(_.getSortText)
             .zipWithIndex
             .map { case (item, i) =>
@@ -164,7 +122,10 @@ final class PcCompletionProvider() extends CompletionContributor with DumbAware 
               withPriority
             }
         }
-      ApplicationUtil.runWithCheckCanceled(completions, ProgressIndicatorProvider.getInstance().getProgressIndicator)
+      ApplicationUtil.runWithCheckCanceled(
+        completions,
+        ProgressIndicatorProvider.getInstance().getProgressIndicator
+      )
       result.addAllElements(completions.get().asJava)
       result.stopHere()
     }
