@@ -12,7 +12,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.ProgressIndicatorProvider
-import com.intellij.openapi.project.{Project, ProjectLocator, ProjectManager}
+import com.intellij.openapi.project.{DumbAware, Project, ProjectLocator, ProjectManager}
 import com.intellij.openapi.roots.{CompilerModuleExtension, ProjectRootManager}
 import com.intellij.patterns.{CharPattern, ElementPattern, PlatformPatterns, StandardPatterns}
 import com.intellij.psi.{PsiClass, PsiElement, PsiFile}
@@ -26,20 +26,20 @@ import org.jetbrains.plugins.scala.caches.ScalaShortNamesCacheManager
 import org.jetbrains.plugins.scala.icons.Icons
 import org.jetbrains.plugins.scala.lang.completion.ScalaGlobalMembersCompletionContributor
 import org.jetbrains.plugins.scala.lang.psi.api.ScalaPsiElement
-
 import java.net.URI
 import java.nio.file.Paths
 import java.util
 import java.util.Optional
 import scala.jdk.FutureConverters.CompletionStageOps
+
 import javax.swing.Icon
 import scala.meta.internal.metals.CompilerOffsetParams
 import scala.meta.internal.pc.CompletionItemData
 import scala.meta.pc.{ParentSymbols, PresentationCompiler, SymbolDocumentation, SymbolSearch, SymbolSearchVisitor}
+
 import org.jetbrains.plugins.scala.extensions.executionContext.appExecutionContext
 import org.jetbrains.plugins.scala.caches.ScalaShortNamesCache
 import org.jetbrains.plugins.scala.debugger.ui.util.CompletableFutureOps
-
 import scala.jdk.CollectionConverters._
 
 final class CompletionIdentifier(
@@ -105,7 +105,7 @@ object SemanticDbSymbolCreator {
   }
 }
 
-final class PcCompletionProvider() extends CompletionContributor {
+final class PcCompletionProvider() extends CompletionContributor with DumbAware {
   val logger = Logger.getInstance(getClass.getName)
   logger.warn("Starting PCCompletionProvider")
 
@@ -114,6 +114,7 @@ final class PcCompletionProvider() extends CompletionContributor {
       result: CompletionResultSet
   ): Unit = {
     val project = parameters.getEditor.getProject
+    logger.warn(s"completions for: ${parameters.getOriginalFile.getName}")
     val pattern = StandardPatterns.string().withLength(4)
     result.restartCompletionOnPrefixChange(pattern)
     val compilersService =
@@ -123,7 +124,8 @@ final class PcCompletionProvider() extends CompletionContributor {
       .getInstance(project)
       .getFileIndex
       .getModuleForFile(file)
-    val optPc = compilersService.getPresentationCompiler(module)
+    logger.warn(s"module for: ${if(module != null) module.getName else "null"}")
+    val optPc = Option(module).flatMap(compilersService.getPresentationCompiler)
 
     val path = Paths.get(file.getCanonicalPath)
     val params = CompilerOffsetParams(

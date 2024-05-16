@@ -28,6 +28,7 @@ class PresentationCompilerPluginService(val project: Project) {
         .withoutSdk()
         .getClassesRoots
         .map(_.getPresentableUrl)
+      logger.warn(s"classpath # ${originalClasspath.size}")
       val fullClasspath = originalClasspath.toList.map(Paths.get(_))
 
       val cache = PsiShortNamesCache.getInstance(project)
