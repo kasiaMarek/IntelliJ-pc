@@ -12,16 +12,23 @@ import com.intellij.openapi.progress.ProgressIndicatorProvider
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.patterns.StandardPatterns
-import org.eclipse.lsp4j.CompletionItemKind
-import org.eclipse.lsp4j.CompletionItemTag
+import org.eclipse.lsp4j.{
+  CompletionItemKind,
+  CompletionItemTag,
+  Position,
+  TextEdit
+}
 import org.jetbrains.plugins.scala.debugger.ui.util.CompletableFutureOps
 import org.jetbrains.plugins.scala.extensions.executionContext.appExecutionContext
 import org.jetbrains.plugins.scala.icons.Icons
-
 import java.nio.file.Paths
+
 import javax.swing.Icon
 import scala.jdk.CollectionConverters._
 import scala.meta.internal.metals.CompilerOffsetParams
+
+import com.intellij.openapi.application.{ApplicationManager, WriteAction}
+import com.intellij.openapi.editor.{Document, Editor}
 
 final class PcCompletionProvider()
     extends CompletionContributor
@@ -64,25 +71,28 @@ final class PcCompletionProvider()
             .sortBy(_.getSortText)
             .zipWithIndex
             .map { case (item, i) =>
-              val element = LookupElementBuilder.create(item.getFilterText)
-              val withTailText = if (item.getKind != CompletionItemKind.Field) {
-                element.withTailText(item.getDetail)
-              } else element.withTypeText(item.getDetail)
-              val withDeprecation =
-                if (
-                  item.getTags != null && item.getTags.asScala.contains(
-                    CompletionItemTag.Deprecated
-                  )
-                )
-                  withTailText.withStrikeoutness(true)
-                else withTailText
-              val withIcon = lspToIJIcon(item.getKind)
-                .map(icon => withDeprecation.withIcon(icon))
-                .getOrElse(withDeprecation)
-              val withFilterText = withIcon.withLookupString(item.getFilterText)
-              val withPriority =
-                PrioritizedLookupElement.withPriority(withFilterText, 1000 - i)
-              withPriority
+              val element = LookupElementBuilder
+                .create(item.getTextEdit.getLeft.getNewText)
+                .withInsertHandler { (context, _) =>
+                  val edits = Option(
+                    item.getAdditionalTextEdits
+                  ).toList.flatMap(_.asScala.toList)
+                  applyEdits(context.getEditor, context.getDocument, edits)
+                }
+                .withRenderer { (_, presentation) =>
+                  presentation.setItemText(item.getLabel)
+                  if (item.getKind != CompletionItemKind.Field) {
+                    presentation.setTailText(item.getDetail)
+                  } else presentation.setTypeText(item.getDetail)
+                  lspToIJIcon(item.getKind).foreach(presentation.setIcon)
+                  val isDeprecated =
+                    item.getTags != null && item.getTags.asScala.contains(
+                      CompletionItemTag.Deprecated
+                    )
+                  if (isDeprecated) presentation.setStrikeout(true)
+                }
+                .withLookupString(item.getFilterText)
+              PrioritizedLookupElement.withPriority(element, 1000 - i)
             }
         }
       ApplicationUtil.runWithCheckCanceled(
@@ -90,7 +100,6 @@ final class PcCompletionProvider()
         ProgressIndicatorProvider.getInstance().getProgressIndicator
       )
       result.addAllElements(completions.get().asJava)
-      result.stopHere()
     }
   }
 
@@ -123,6 +132,59 @@ final class PcCompletionProvider()
       case CompletionItemKind.TypeParameter => Some(Icons.TYPE_ALIAS)
     }
 
+  }
+
+  // copied from: https://github.com/redhat-developer/lsp4ij
+  def applyEdits(
+      editor: Editor,
+      document: Document,
+      edits: List[TextEdit]
+  ): Unit = {
+    if (ApplicationManager.getApplication.isWriteAccessAllowed)
+      edits.foreach(edit => applyEdit(editor, edit, document))
+    else
+      WriteAction.run(() =>
+        edits.foreach(edit => applyEdit(editor, edit, document))
+      )
+  }
+
+  private def applyEdit(
+      editor: Editor,
+      textEdit: TextEdit,
+      document: Document
+  ): Unit = {
+    val marker = document.createRangeMarker(
+      toOffset(textEdit.getRange.getStart, document),
+      toOffset(textEdit.getRange.getEnd, document)
+    )
+    marker.setGreedyToRight(true)
+    val startOffset = marker.getStartOffset
+    val endOffset = marker.getEndOffset
+    var text = textEdit.getNewText
+    if (text != null) text = text.replaceAll("\r", "")
+    if (text == null || text.isEmpty)
+      document.deleteString(startOffset, endOffset)
+    else if (endOffset - startOffset <= 0)
+      document.insertString(startOffset, text)
+    else document.replaceString(startOffset, endOffset, text)
+    if (text != null && text.nonEmpty)
+      editor.getCaretModel.moveToOffset(marker.getEndOffset)
+    marker.dispose()
+  }
+
+  private def toOffset(position: Position, document: Document): Int = {
+    val line = position.getLine
+    if (line >= document.getLineCount) {
+      document.getTextLength
+    } else if (line < 0) 0
+    else {
+      val lineOffset = document.getLineStartOffset(line)
+      val nextLineOffset = document.getLineEndOffset(line)
+      Math.max(
+        Math.min(lineOffset + position.getCharacter, nextLineOffset),
+        lineOffset
+      )
+    }
   }
 
 }

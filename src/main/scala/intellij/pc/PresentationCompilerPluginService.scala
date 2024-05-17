@@ -13,6 +13,8 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.meta.pc.PresentationCompiler
+import scala.meta.pc.PresentationCompilerConfig
+import scala.meta.internal.pc.PresentationCompilerConfigImpl
 
 class PresentationCompilerPluginService(val project: Project) {
   private val logger = Logger.getInstance(getClass.getName)
@@ -37,6 +39,10 @@ class PresentationCompilerPluginService(val project: Project) {
         project.getService(classOf[WorkspaceSymbolProvider]).symbolSearch
       val pc = presentationCompiler(scalaVersion)
         .withSearch(symbolSearch)
+        .withConfiguration(
+          PresentationCompilerConfigImpl()
+            .copy(isCompletionSnippetsEnabled = false)
+        )
         .newInstance(module0.getName, fullClasspath.asJava, Nil.asJava)
 
       compilers.addOne(module0 -> pc)
