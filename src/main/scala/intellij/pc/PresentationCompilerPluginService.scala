@@ -6,14 +6,15 @@ import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.OrderEnumerator
 import intellij.pc.Embedded.presentationCompiler
-import intellij.pc.symbolSearch.WorkspaceSymbolProvider
-
+import intellij.pc.symbolSearch.{
+  StandaloneSymbolSearch,
+  WorkspaceSymbolProvider
+}
 import java.nio.file.Paths
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.meta.pc.PresentationCompiler
-import scala.meta.pc.PresentationCompilerConfig
 import scala.meta.internal.pc.PresentationCompilerConfigImpl
 
 class PresentationCompilerPluginService(val project: Project) {
@@ -33,12 +34,14 @@ class PresentationCompilerPluginService(val project: Project) {
         .withoutSdk()
         .getClassesRoots
         .map(_.getPresentableUrl)
-      logger.warn(s"classpath # ${originalClasspath.size}")
+      logger.warn(s"classpath # ${originalClasspath.length}")
       val fullClasspath = originalClasspath.toList.map(Paths.get(_))
-      val symbolSearch =
+      val workspaceSymbolSearch =
         project.getService(classOf[WorkspaceSymbolProvider]).symbolSearch
       val pc = presentationCompiler(scalaVersion)
-        .withSearch(symbolSearch)
+        .withSearch(
+          new StandaloneSymbolSearch(fullClasspath, workspaceSymbolSearch)
+        )
         .withConfiguration(
           PresentationCompilerConfigImpl()
             .copy(isCompletionSnippetsEnabled = false)
