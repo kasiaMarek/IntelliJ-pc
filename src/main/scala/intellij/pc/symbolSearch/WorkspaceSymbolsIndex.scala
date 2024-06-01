@@ -1,7 +1,6 @@
 package intellij.pc.symbolSearch
 
-import scala.meta.internal.metals.StringBloomFilter
-import scala.meta.internal.metals.WorkspaceSymbolInformation
+import scala.meta.internal.metals.{StringBloomFilter, WorkspaceSymbolInformation}
 
 /** An index of symbols defined in workspace sources.
   *

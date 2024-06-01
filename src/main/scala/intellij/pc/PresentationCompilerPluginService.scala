@@ -6,20 +6,17 @@ import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.OrderEnumerator
 import intellij.pc.Embedded.presentationCompiler
-import intellij.pc.symbolSearch.{
-  StandaloneSymbolSearch,
-  WorkspaceSymbolProvider
-}
+import intellij.pc.symbolSearch.{StandaloneSymbolSearch, WorkspaceSymbolProvider}
+
 import java.nio.file.Paths
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
-import scala.meta.pc.PresentationCompiler
 import scala.meta.internal.pc.PresentationCompilerConfigImpl
+import scala.meta.pc.PresentationCompiler
 
-class PresentationCompilerPluginService(val project: Project) {
+final class PresentationCompilerPluginService(val project: Project) {
   private val logger = Logger.getInstance(getClass.getName)
-  private val compilers: TrieMap[module.Module, PresentationCompiler] =
+  private val compilers: TrieMap[module.Module, Option[PresentationCompiler]] =
     new TrieMap()
   private val moduleScalaVersionCache: TrieMap[module.Module, String] =
     new TrieMap()
@@ -39,39 +36,32 @@ class PresentationCompilerPluginService(val project: Project) {
       val workspaceSymbolSearch =
         project.getService(classOf[WorkspaceSymbolProvider]).symbolSearch
       val pc = presentationCompiler(scalaVersion)
-        .withSearch(
-          new StandaloneSymbolSearch(fullClasspath, workspaceSymbolSearch)
-        )
-        .withConfiguration(
-          PresentationCompilerConfigImpl()
-            .copy(isCompletionSnippetsEnabled = false)
-        )
+        .withSearch(new StandaloneSymbolSearch(project, fullClasspath, workspaceSymbolSearch) )
+        .withConfiguration(PresentationCompilerConfigImpl().copy(isCompletionSnippetsEnabled = false))
         .newInstance(module0.getName, fullClasspath.asJava, Nil.asJava)
 
-      compilers.addOne(module0 -> pc)
+      compilers.update(module0, Some(pc))
       pc
     }
-
   }
 
-  def getPresentationCompiler(
-      module0: module.Module
-  )(implicit ec: ExecutionContext) = {
-    Option(compilers.getOrElseUpdate(module0, startPc(module0).get))
+  def getPresentationCompiler(module0: module.Module ): Option[PresentationCompiler] = this.synchronized {
+    if (!compilers.contains(module0)) startPc(module0)
+    else compilers(module0)
   }
 
-  def restarPc(modules: Set[module.Module]) = {
+  def restartPc(modules: Set[module.Module]): Unit = {
     val allModules = getInverseDepModules(modules)
     for {
       module <- allModules
       pc <- compilers.get(module)
     } {
       logger.warn(s"Restarting pc for module ${module.getName}")
-      pc.restart()
+      pc.foreach(_.restart())
     }
   }
 
-  def getScalaVersion(module0: module.Module) = {
+  def getScalaVersion(module0: module.Module): Option[String] = {
     val result = moduleScalaVersionCache.getOrElseUpdate(
       module0, {
         var sdkScalaVersion: String = null
@@ -101,9 +91,9 @@ class PresentationCompilerPluginService(val project: Project) {
     Option(result)
   }
 
-  def stopPc() = {
+  def stopPc(): Unit = {
     moduleScalaVersionCache.clear()
-    compilers.foreach { case (_, pc) => pc.shutdown() }
+    compilers.foreach { case (_, pc) => pc.foreach(_.shutdown()) }
     compilers.clear()
   }
 

@@ -2,12 +2,10 @@ package intellij.pc
 
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.extensions.ExtensionPoint
-import com.intellij.openapi.extensions.Extensions
+import com.intellij.openapi.extensions.{ExtensionPoint, Extensions}
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.util.KeyedLazyInstance
-import intellij.pc.symbolSearch.Indexer
 import kotlin.coroutines.Continuation
 
 import scala.util.control.NonFatal
@@ -37,7 +35,6 @@ class ReflectionUnregisterUtil extends ProjectActivity {
           e
         )
     }
-    project.getService(classOf[Indexer]).index()
     project
   }
 }

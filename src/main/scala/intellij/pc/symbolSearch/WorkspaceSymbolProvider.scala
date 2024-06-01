@@ -3,18 +3,14 @@ package intellij.pc.symbolSearch
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.OrderEnumerator
-import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.roots.{OrderEnumerator, ProjectRootManager}
 
-import java.nio.file.Files
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.collection.concurrent.TrieMap
-import scala.meta.internal.metals.Fuzzy
-import scala.meta.internal.metals.WorkspaceSymbolInformation
-import scala.meta.internal.metals.WorkspaceSymbolQuery
+import scala.meta.internal.metals.{Fuzzy, WorkspaceSymbolInformation, WorkspaceSymbolQuery}
 import scala.meta.pc.SymbolSearchVisitor
 
-class WorkspaceSymbolProvider(project: Project) {
+final class WorkspaceSymbolProvider(project: Project) {
   private val logger = Logger.getInstance(getClass.getName)
   private val MaxWorkspaceMatchesForShortQuery = 100
   private val inWorkspace: TrieMap[Path, WorkspaceSymbolsIndex] =
@@ -47,6 +43,7 @@ class WorkspaceSymbolProvider(project: Project) {
       Indexer.forAllSourceFiles(
         fileIndex,
         module,
+        ProgressIndicatorWrapper.empty,
         { source =>
           val path = source.toNioPath
           for {
@@ -80,6 +77,7 @@ class WorkspaceSymbolProvider(project: Project) {
       Indexer.forAllSourceFiles(
         fileIndex,
         module,
+        ProgressIndicatorWrapper.empty,
         { source =>
           val path = source.toNioPath
           for {

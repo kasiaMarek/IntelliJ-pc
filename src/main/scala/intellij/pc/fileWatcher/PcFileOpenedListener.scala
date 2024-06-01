@@ -1,8 +1,7 @@
 package intellij.pc.fileWatcher
 
 import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.fileEditor.FileEditorManagerEvent
-import com.intellij.openapi.fileEditor.FileEditorManagerListener
+import com.intellij.openapi.fileEditor.{FileEditorManagerEvent, FileEditorManagerListener}
 import com.intellij.openapi.project.Project
 import com.intellij.util.concurrency.AppExecutorUtil
 

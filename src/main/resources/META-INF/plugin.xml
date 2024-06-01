@@ -15,6 +15,16 @@
         <listener class="intellij.pc.fileWatcher.PcFileOpenedListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
 
+    <actions>
+        <action
+                id="intellij.pc.ReindexWorkspace"
+                class="intellij.pc.actions.IndexWorkspaceAction"
+                text="Reindex Workspace"
+                description="SDK action example 2">
+            <add-to-group group-id="ToolsMenu" anchor="first"/>
+        </action>
+    </actions>
+
     <extensions defaultExtensionNs="com.intellij">
         <projectService id="PresentationCompilerPluginService"
                 serviceImplementation="intellij.pc.PresentationCompilerPluginService"/>

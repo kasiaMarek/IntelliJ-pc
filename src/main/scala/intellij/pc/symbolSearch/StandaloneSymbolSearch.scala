@@ -1,30 +1,22 @@
 package intellij.pc.symbolSearch
 
+import com.intellij.openapi.project.Project
+import org.eclipse.lsp4j.Location
+
 import java.net.URI
 import java.nio.file.Path
 import java.util
 import java.util.{Collections, Optional}
-import scala.meta.internal.metals.{
-  ClasspathSearch,
-  ExcludedPackagesHandler,
-  WorkspaceSymbolQuery
-}
-import scala.meta.pc.{
-  ParentSymbols,
-  SymbolDocumentation,
-  SymbolSearch,
-  SymbolSearchVisitor
-}
+import scala.meta.internal.metals.WorkspaceSymbolQuery
+import scala.meta.pc.{ParentSymbols, SymbolDocumentation, SymbolSearch, SymbolSearchVisitor}
 
-import org.eclipse.lsp4j.Location
-
-class StandaloneSymbolSearch(
+final class StandaloneSymbolSearch(
+    project: Project,
     classpath: Seq[Path],
-    workspaceSearch: SymbolSearch
+    workspaceSearch: SymbolSearch,
 ) extends SymbolSearch {
 
-  private val classpathSearch =
-    ClasspathSearch.fromClasspath(classpath, ExcludedPackagesHandler.default)
+  val lazyClasspathSearch = new LazyClasspathSearch(project, classpath)
 
   override def documentation(
       symbol: String,
@@ -44,7 +36,7 @@ class StandaloneSymbolSearch(
       buildTargetIdentifier: String,
       visitor: SymbolSearchVisitor
   ): SymbolSearch.Result = {
-    classpathSearch.search(WorkspaceSymbolQuery.exact(query), visitor)
+    lazyClasspathSearch.getSearch.search(WorkspaceSymbolQuery.exact(query), visitor)
     workspaceSearch.search(query, buildTargetIdentifier, visitor)
   }
 
