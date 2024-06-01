@@ -22,7 +22,7 @@ class FileStateService(project: Project) {
     if (modules.nonEmpty) {
       project
         .getService(classOf[PresentationCompilerPluginService])
-        .restarPc(modules)
+        .restartPc(modules)
     }
   }
 

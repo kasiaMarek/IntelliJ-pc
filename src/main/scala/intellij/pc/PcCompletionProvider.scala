@@ -1,34 +1,29 @@
 package intellij.pc
 
-import com.intellij.codeInsight.completion.CompletionContributor
-import com.intellij.codeInsight.completion.CompletionParameters
-import com.intellij.codeInsight.completion.CompletionResultSet
-import com.intellij.codeInsight.completion.PrioritizedLookupElement
-import com.intellij.codeInsight.lookup.LookupElementBuilder
+import com.intellij.codeInsight.completion.{CompletionContributor, CompletionParameters, CompletionResultSet, PrioritizedLookupElement}
+import com.intellij.codeInsight.lookup.{LookupElement, LookupElementBuilder}
 import com.intellij.icons.AllIcons.Nodes
 import com.intellij.openapi.application.ex.ApplicationUtil
+import com.intellij.openapi.application.{ApplicationManager, WriteAction}
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.{Document, Editor}
 import com.intellij.openapi.progress.ProgressIndicatorProvider
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.patterns.StandardPatterns
-import org.eclipse.lsp4j.{
-  CompletionItemKind,
-  CompletionItemTag,
-  Position,
-  TextEdit
-}
+import org.eclipse.lsp4j.{CompletionItemKind, CompletionItemTag, Position, TextEdit}
 import org.jetbrains.plugins.scala.debugger.ui.util.CompletableFutureOps
 import org.jetbrains.plugins.scala.extensions.executionContext.appExecutionContext
 import org.jetbrains.plugins.scala.icons.Icons
+
 import java.nio.file.Paths
-
+import java.util.concurrent.CompletableFuture
 import javax.swing.Icon
+import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
+import scala.jdk.FutureConverters._
 import scala.meta.internal.metals.CompilerOffsetParams
-
-import com.intellij.openapi.application.{ApplicationManager, WriteAction}
-import com.intellij.openapi.editor.{Document, Editor}
+import scala.meta.pc.PresentationCompiler
 
 final class PcCompletionProvider()
     extends CompletionContributor
@@ -54,7 +49,7 @@ final class PcCompletionProvider()
     logger.warn(
       s"module for: ${if (module != null) module.getName else "null"}"
     )
-    val optPc = Option(module).flatMap(compilersService.getPresentationCompiler)
+    val optPc = Future(Option(module).flatMap(compilersService.getPresentationCompiler)).asJava
 
     val path = Paths.get(file.getCanonicalPath)
     val params = CompilerOffsetParams(
@@ -63,45 +58,55 @@ final class PcCompletionProvider()
       parameters.getOffset
     )
 
-    optPc.foreach { pc =>
-      val completions = pc
-        .complete(params)
-        .map { res =>
-          res.getItems.asScala.toList
-            .sortBy(_.getSortText)
-            .zipWithIndex
-            .map { case (item, i) =>
-              val element = LookupElementBuilder
-                .create(item.getTextEdit.getLeft.getNewText)
-                .withInsertHandler { (context, _) =>
-                  val edits = Option(
-                    item.getAdditionalTextEdits
-                  ).toList.flatMap(_.asScala.toList)
-                  applyEdits(context.getEditor, context.getDocument, edits)
-                }
-                .withRenderer { (_, presentation) =>
-                  presentation.setItemText(item.getLabel)
-                  if (item.getKind != CompletionItemKind.Field) {
-                    presentation.setTailText(item.getDetail)
-                  } else presentation.setTypeText(item.getDetail)
-                  lspToIJIcon(item.getKind).foreach(presentation.setIcon)
-                  val isDeprecated =
-                    item.getTags != null && item.getTags.asScala.contains(
-                      CompletionItemTag.Deprecated
-                    )
-                  if (isDeprecated) presentation.setStrikeout(true)
-                }
-                .withLookupString(item.getFilterText)
-              PrioritizedLookupElement.withPriority(element, 1000 - i)
-            }
-        }
-      ApplicationUtil.runWithCheckCanceled(
-        completions,
-        ProgressIndicatorProvider.getInstance().getProgressIndicator
-      )
-      result.addAllElements(completions.get().asJava)
+    val computations: CompletableFuture[List[LookupElement]] = optPc.toCompletableFuture.flatMap {
+      case Some(pc) => getCompletions(pc, params)
+      case None => CompletableFuture.completedFuture(List.empty)
     }
+
+    ApplicationUtil.runWithCheckCanceled(
+      computations,
+      ProgressIndicatorProvider.getInstance().getProgressIndicator
+    )
+    result.addAllElements(computations.get().asJava)
   }
+
+  private def getCompletions(pc: PresentationCompiler, params: CompilerOffsetParams): CompletableFuture[List[LookupElement]] = {
+    pc
+      .complete(params)
+      .map { res =>
+        res.getItems.asScala.toList
+          .sortBy(_.getSortText)
+          .zipWithIndex
+          .map { case (item, i) =>
+            val element = LookupElementBuilder
+              .create(item.getTextEdit.getLeft.getNewText)
+              .withInsertHandler { (context, _) =>
+                val edits = Option(
+                  item.getAdditionalTextEdits
+                ).toList.flatMap(_.asScala.toList)
+                applyEdits(context.getEditor, context.getDocument, edits)
+              }
+              .withRenderer { (_, presentation) =>
+                val label = item.getLabel
+                val correctedLabel = label.stripSuffix(item.getDetail)
+                presentation.setItemText(correctedLabel)
+
+                if (item.getKind != CompletionItemKind.Field) {
+                  presentation.setTailText(item.getDetail)
+                } else presentation.setTypeText(item.getDetail)
+                lspToIJIcon(item.getKind).foreach(presentation.setIcon)
+                val isDeprecated =
+                  item.getTags != null && item.getTags.asScala.contains(
+                    CompletionItemTag.Deprecated
+                  )
+                if (isDeprecated) presentation.setStrikeout(true)
+              }
+              .withLookupString(item.getFilterText)
+            PrioritizedLookupElement.withPriority(element, 1000 - i)
+          }
+      }
+  }
+
 
   private def lspToIJIcon(kind: CompletionItemKind): Option[Icon] = {
     kind match {

@@ -1,19 +1,14 @@
 package intellij.pc.symbolSearch
 
-import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.module.{Module, ModuleManager}
 import com.intellij.openapi.project.Project
 import org.eclipse.lsp4j.Location
 
 import java.net.URI
-import java.util.Collections
-import java.util.Optional
+import java.util.{Collections, Optional}
 import java.{util => ju}
 import scala.meta.internal.metals.WorkspaceSymbolQuery
-import scala.meta.pc.ParentSymbols
-import scala.meta.pc.SymbolDocumentation
-import scala.meta.pc.SymbolSearch
-import scala.meta.pc.SymbolSearchVisitor
+import scala.meta.pc.{ParentSymbols, SymbolDocumentation, SymbolSearch, SymbolSearchVisitor}
 
 /** Implementation of SymbolSearch that delegates to WorkspaceSymbolProvider and
   * SymbolDocumentationIndexer.

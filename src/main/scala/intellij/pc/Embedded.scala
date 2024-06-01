@@ -1,11 +1,7 @@
 package intellij.pc
 
 import com.intellij.openapi.diagnostic.Logger
-import coursierapi.Dependency
-import coursierapi.Fetch
-import coursierapi.MavenRepository
-import coursierapi.Repository
-import coursierapi.ResolutionParams
+import coursierapi._
 
 import java.net.URLClassLoader
 import java.nio.file.Path

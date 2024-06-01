@@ -2,12 +2,9 @@ package intellij.pc.symbolSearch
 
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.impl.LoadTextUtil
-import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.module.{Module, ModuleManager}
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ModuleRootManager
-import com.intellij.openapi.roots.ProjectFileIndex
-import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.roots.{ModuleRootManager, ProjectFileIndex, ProjectRootManager}
 import com.intellij.openapi.vfs.VirtualFile
 import intellij.pc.PresentationCompilerPluginService
 
@@ -15,18 +12,15 @@ import scala.collection.mutable.ArrayBuffer
 import scala.meta.Dialect
 import scala.meta.dialects._
 import scala.meta.inputs.Input
-import scala.meta.internal.metals.EmptyReportContext
-import scala.meta.internal.metals.SemanticdbDefinition
-import scala.meta.internal.metals.WorkspaceSymbolInformation
-import scala.meta.internal.mtags.MtagsEnrichments.XtensionSemanticdbRange
-import scala.meta.internal.mtags.MtagsEnrichments.XtensionSymbolInformation
-import scala.meta.internal.mtags.MtagsEnrichments.XtensionSymbolInformationKind
+import scala.meta.internal.metals.{EmptyReportContext, SemanticdbDefinition, WorkspaceSymbolInformation}
+import scala.meta.internal.mtags.MtagsEnrichments.{XtensionSemanticdbRange, XtensionSymbolInformation, XtensionSymbolInformationKind}
 import scala.util.control.NonFatal
 
-class Indexer(project: Project) {
+final class Indexer(project: Project) {
   private val logger = Logger.getInstance(getClass.getName)
 
-  def index() = {
+  // indexing works on all modules, maybe it should prioritize currently edited one ?
+  def indexWorkspace(indicator: IndexingProgressIndicator) = {
     val fileIndex = ProjectRootManager.getInstance(project).getFileIndex
     for {
       module <- ModuleManager.getInstance(project).getModules
@@ -34,7 +28,9 @@ class Indexer(project: Project) {
         .getService(classOf[PresentationCompilerPluginService])
         .getScalaVersion(module)
       dialect = dialectForScalaVersion(scalaVersion)
-    } Indexer.forAllSourceFiles(fileIndex, module, indexSourceFile(_, dialect))
+    } {
+      Indexer.forAllSourceFiles(fileIndex, module, indicator, indexSourceFile(_, dialect))
+    }
     logger.warn(s"Finished indexing workspace for pc.")
   }
 
@@ -60,7 +56,7 @@ class Indexer(project: Project) {
       val symbols = ArrayBuffer.empty[WorkspaceSymbolInformation]
       val methodSymbols = ArrayBuffer.empty[WorkspaceSymbolInformation]
       val input =
-        Input.VirtualFile(vFile.getPath, LoadTextUtil.loadText(vFile).toString)
+        Input.VirtualFile(vFile.getUrl, LoadTextUtil.loadText(vFile).toString)
       SemanticdbDefinition.foreach(input, dialect, includeMembers = true) {
         case SemanticdbDefinition(info, occ, _) =>
           if (info.isExtension) {
@@ -109,21 +105,33 @@ class Indexer(project: Project) {
 
 object Indexer {
   def forAllSourceFiles(
-      fileIndex: ProjectFileIndex,
-      module: Module,
-      process: VirtualFile => Unit
+                         fileIndex: ProjectFileIndex,
+                         module: Module,
+                         indicator: ProgressIndicatorWrapper,
+                         process: VirtualFile => Unit
   ): Unit = {
     for {
       root <- ModuleRootManager.getInstance(module).getContentRoots
-    } yield fileIndex.iterateContentUnderDirectory(
-      root,
-      (fileOrDir: VirtualFile) => {
+    } yield {
+      var totalSize = 0
+      fileIndex.iterateContentUnderDirectory(root, fileOrDir => {
         if (!fileOrDir.isDirectory && isScalaOrJava(fileOrDir)) {
-          process(fileOrDir)
+          totalSize += 1
         }
         true
-      }
-    )
+      })
+      indicator.nextProgress("Indexing workspace", Some(totalSize))
+
+      fileIndex.iterateContentUnderDirectory(
+        root,
+        (fileOrDir: VirtualFile) => {
+          if (!indicator.isCancelled && !fileOrDir.isDirectory && isScalaOrJava(fileOrDir)) {
+            process(fileOrDir)
+            indicator.step(root.getPath)
+          }
+          true
+        }
+    )}
   }
 
   private def isScalaOrJava(vFile: VirtualFile): Boolean = {
